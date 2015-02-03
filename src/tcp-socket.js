@@ -173,16 +173,23 @@
                 return; // do nothing if socket not open
             }
 
+            // Read up to 4096 bytes from the socket. This is not a fixed number (the mode was set
+            // with inputStreamOptions.partial property), so it might return with a smaller
+            // amount of bytes.
             self._dataReader.loadAsync(4096).done(function(availableByteCount) {
+
                 if (!availableByteCount) {
+                    // no bytes available for reading, restart the reading process
                     return setImmediate(self._read.bind(self));
                 }
 
+                // we need an Uint8Array that gets filled with the bytes from the buffer
                 var data = new Uint8Array(availableByteCount);
-                self._dataReader.readBytes(data);
+                self._dataReader.readBytes(data); // data argument gets filled with the bytes
 
                 self._emit('data', data.buffer);
 
+                // restart reading process
                 return setImmediate(self._read.bind(self));
             }, function(E) {
                 self._errorHandler(E);
