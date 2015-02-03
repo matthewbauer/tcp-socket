@@ -84,13 +84,13 @@
     function winShim() {
 
         TCPSocket = function (config) {
-            var self = this,
-                netApi;
+            var self = this;
 
             config.options.useSecureTransport = (typeof config.options.useSecureTransport !== 'undefined') ? config.options.useSecureTransport : false;
             config.options.binaryType = config.options.binaryType || 'arraybuffer';
 
             // public flags
+            // NB! HostName constructor will throw on invalid input
             self.host = new Windows.Networking.HostName(config.host);
             self.port = config.port;
             self.ssl = config.options.useSecureTransport;
@@ -98,26 +98,35 @@
             self.readyState = 'connecting';
             self.binaryType = config.options.binaryType;
 
-            self._dataReader = false;
-
             if (self.binaryType !== 'arraybuffer') {
                 throw new Error('Only arraybuffers are supported!');
             }
 
             self._socket = new Windows.Networking.Sockets.StreamSocket();
 
+            self._socket.control.keepAlive = true;
+            self._socket.control.noDelay = true;
+
+            self._dataReader = null;
+            self._dataWriter = null;
+
+            // Initiate connection to destination
             self._socket.
                 connectAsync(self.host, self.port).
                 done(function () {
-                    self._emit('open');
                     self._setStreamHandlers();
+                    self._emit('open');
                 }, function (E) {
-                    self._emit('error', error);
+                    self._emit('error', E);
                 });
         };
 
+        /**
+         * Initiate Reader and Writer interfaces for the socket
+         */
         TCPSocket.prototype._setStreamHandlers = function () {
             var self = this;
+
             self._dataReader = new Windows.Storage.Streams.DataReader(self._socket.inputStream);
             self._dataReader.inputStreamOptions = Windows.Storage.Streams.InputStreamOptions.partial;
 
@@ -126,13 +135,21 @@
             self._read();
         };
 
-        TCPSocket.prototype._removeStreamHandlers = function () {
+        TCPSocket.prototype._errorHandler = function (error) {
+            var self = this;
+
+            // we ignore errors after close has been called, since all aborted operations
+            // will emit their error handlers
+            if (self.readyState !== 'closing' && self.readyState !== 'closed') {
+                self._emit('error', error);
+                self.close();
+            }
         };
 
         TCPSocket.prototype._read = function () {
             var self = this;
 
-            if (self.readyState !== 'open') {
+            if (self.readyState !== 'open' && self.readyState !== 'connecting') {
                 return; // do nothing if socket not open
             }
 
@@ -148,8 +165,7 @@
 
                 return setImmediate(self._read.bind(self));
             }, function (E) {
-                self._emit('error', E);
-                self.close();
+                self._errorHandler(E);
             });
         };
 
@@ -158,17 +174,33 @@
         //
 
         TCPSocket.prototype.close = function () {
-            this.readyState = 'closing';
+            var self = this;
+            self.readyState = 'closing';
+
+            try {
+                self._socket.close();
+            } catch (E) {
+                self._emit('error', E);
+            }
+
+            setImmediate(self._emit.bind(self, 'close'));
         };
 
         TCPSocket.prototype.send = function (data) {
             var self = this;
+
+            if (this.readyState !== 'open') {
+                return;
+            }
+
+            // Write bytes to buffer
             this._dataWriter.writeBytes(data.buffer && new Uint8Array(data) || data);
+
+            // Emit buffer contents
             self._dataWriter.storeAsync().done(function () {
                 self._emit('drain');
             }, function (E) {
-                self._emit('error', E);
-                self.close();
+                self._errorHandler(E);
             });
         };
 
