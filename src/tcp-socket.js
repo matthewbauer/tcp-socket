@@ -76,7 +76,107 @@
     } else if (typeof window === 'object' && typeof io === 'function') {
         // websocket proxy
         wsShim();
+    } else if (typeof WinJS === 'object'){
+        // Windows app using SocketStream
+        winShim();
     }
+
+    function winShim() {
+
+        TCPSocket = function (config) {
+            var self = this,
+                netApi;
+
+            config.options.useSecureTransport = (typeof config.options.useSecureTransport !== 'undefined') ? config.options.useSecureTransport : false;
+            config.options.binaryType = config.options.binaryType || 'arraybuffer';
+
+            // public flags
+            self.host = new Windows.Networking.HostName(config.host);
+            self.port = config.port;
+            self.ssl = config.options.useSecureTransport;
+            self.bufferedAmount = 0;
+            self.readyState = 'connecting';
+            self.binaryType = config.options.binaryType;
+
+            self._dataReader = false;
+
+            if (self.binaryType !== 'arraybuffer') {
+                throw new Error('Only arraybuffers are supported!');
+            }
+
+            self._socket = new Windows.Networking.Sockets.StreamSocket();
+
+            self._socket.
+                connectAsync(self.host, self.port).
+                done(function () {
+                    self._emit('open');
+                    self._setStreamHandlers();
+                }, function (E) {
+                    self._emit('error', error);
+                });
+        };
+
+        TCPSocket.prototype._setStreamHandlers = function () {
+            var self = this;
+            self._dataReader = new Windows.Storage.Streams.DataReader(self._socket.inputStream);
+            self._dataReader.inputStreamOptions = Windows.Storage.Streams.InputStreamOptions.partial;
+
+            self._dataWriter = new Windows.Storage.Streams.DataWriter(self._socket.outputStream);
+
+            self._read();
+        };
+
+        TCPSocket.prototype._removeStreamHandlers = function () {
+        };
+
+        TCPSocket.prototype._read = function () {
+            var self = this;
+
+            if (self.readyState !== 'open') {
+                return; // do nothing if socket not open
+            }
+
+            self._dataReader.loadAsync(4096).done(function (availableByteCount) {
+                if (!availableByteCount) {
+                    return setImmediate(self._read.bind(self));
+                }
+
+                var data = new Uint8Array(availableByteCount);
+                self._dataReader.readBytes(data);
+
+                self._emit('data', data.buffer);
+
+                return setImmediate(self._read.bind(self));
+            }, function (E) {
+                self._emit('error', E);
+                self.close();
+            });
+        };
+
+        //
+        // API
+        //
+
+        TCPSocket.prototype.close = function () {
+            this.readyState = 'closing';
+        };
+
+        TCPSocket.prototype.send = function (data) {
+            var self = this;
+            this._dataWriter.writeBytes(data.buffer && new Uint8Array(data) || data);
+            self._dataWriter.storeAsync().done(function () {
+                self._emit('drain');
+            }, function (E) {
+                self._emit('error', E);
+                self.close();
+            });
+        };
+
+        TCPSocket.prototype.upgradeToSecure = function () {
+
+        };
+
+    } // end of nodeShim
 
     function nodeShim() {
         TCPSocket = function(config) {
