@@ -25,6 +25,10 @@
         // amd under chrome packaged app
         define(['forge'], factory);
     } else if (typeof exports === 'object' && typeof navigator !== 'undefined') {
+        var forge;
+        if (forge === undefined) {
+            forge = require("node-forge");
+        }
         // common.js for browser apps with native socket support
         // fallback to forge browser global
         module.exports = factory(forge);
