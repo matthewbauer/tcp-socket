@@ -23,9 +23,6 @@
     "url": "https://github.com/whiteout-io/tcp-socket/issues"
   },
   "homepage": "https://github.com/whiteout-io/tcp-socket",
-  "dependencies": {
-    "node-forge": "^0.6.11"
-  },
   "devDependencies": {
     "chai": "~1.7.2",
     "express": "^4.8.6",
@@ -38,7 +35,7 @@
     "grunt-mocha-phantomjs": "~0.4.0",
     "grunt-mocha-test": "~0.6.2",
     "mocha": "~1.16.2",
-    "node-forge": "file:../../../../var/folders/7d/_f8cf13d4cb2k6x8n5llqwsc0000gn/T/npm-59684-2c912a23/git-cache-13d3826d66b6/f9392945268b9826657d9b02831f1649e9db67e3",
+    "node-forge": "git://github.com/matthewbauer/forge.git#browserify2",
     "requirejs": "~2.1.10",
     "sinon": "1.7.3",
     "socket.io": "^1.0.6",
